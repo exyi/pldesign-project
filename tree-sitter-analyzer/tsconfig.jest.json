@@ -1,0 +1,17 @@
+{
+    "extends": "@tsconfig/node16/tsconfig.json",
+    "compilerOptions": {
+        "lib": ["es2022"],
+        "target": "es2022",
+        "moduleResolution": "node",
+        "module": "CommonJS",
+        "strict": true,
+        "declaration": true,
+        "outDir": "dist",
+        "esModuleInterop": true,
+        // "sourceMap": true,
+        "composite": true,
+        "skipLibCheck": true,
+        "inlineSourceMap": true
+    }
+}
