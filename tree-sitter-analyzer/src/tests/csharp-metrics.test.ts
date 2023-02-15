@@ -4,24 +4,26 @@ import { Analyzer } from "../analyzer";
 import { createParser } from "../parserFactory";
 import { AnalyzerQuery, Metrics } from "../queries/base";
 
-import { pythonAnalyzers } from "../queries/python-basic";
+import { csharpAnalyzers } from "../queries/csharp-basic";
 
-const parser = createParser("python");
+const parser = createParser("c-sharp");
 
 
 async function analyze(source: string, queries: AnalyzerQuery | AnalyzerQuery[]): Promise<Metrics> {
 	const analyzer = new Analyzer(await parser, Array.isArray(queries) ? queries : [ queries ])
-	analyzer.analyzeFile("test", "test.py", source)
+	analyzer.analyzeFile("test", "test.cs", source)
 	return analyzer.results[0].metrics
 }
 
 
 test("class definition", async () => {
 	const m = await analyze(`
-class Foo:
-	a: int
-	def a(abc = 12):
-		return lambda x: abc`, Object.values(pythonAnalyzers))
+class Foo {
+	public int a;
+	public Func<int, int> a(int abc = 12) {
+		return x => abc;
+	}
+}`, Object.values(csharpAnalyzers))
 
 	expect(m).toEqual({
 		statements: 1,
@@ -30,16 +32,18 @@ class Foo:
 		function_defs: 1,
 		lambda_functions: 1,
 		literals: 1,
-		type_annotations: 1,
+		type_annotations: 3,
 	})
 })
 
 test("function definition", async () => {
 	const m = await analyze(`
-def a(input: int) -> int:
-	def b(x):
-		return x + 1
-	return map(b, input)`, Object.values(pythonAnalyzers))
+IEnumerable<int> A(IEnumerable<int> input) {
+	int b(int x) {
+		return x + 1;
+	}
+	return input.Select(b);
+}`, Object.values(csharpAnalyzers))
 
 	expect(m).toEqual({
 		statements: 2,
@@ -54,7 +58,7 @@ def a(input: int) -> int:
 
 test("chained calls", async () => {
 	const m = await analyze(`
-a().b.c().d(f("", "", ""), g(), h(i(j(a.b))))`, Object.values(pythonAnalyzers))
+a().b.c().d(f(), g(), h(i(j(a.b))));`, Object.values(csharpAnalyzers))
 
 	expect(m).toEqual({
 		statements: 1,

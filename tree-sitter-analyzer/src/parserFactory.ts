@@ -2,8 +2,19 @@ import TreeSitter from "tree-sitter"
 
 export async function createParser(language: string): Promise<TreeSitter> {
 	const parser = new TreeSitter()
-	const langModule = await import(`tree-sitter-${language}`)
-	// console.log(langModule)
-	parser.setLanguage(langModule.default)
+	const langModule =
+		language == "tsx" ? (await import(`tree-sitter-${"typescript"}`)).tsx :
+		await import(`tree-sitter-${language}`)
+	const lang =
+		langModule.default && langModule.default.nodeTypeInfo ? langModule.default :
+		langModule.nodeTypeInfo ? langModule :
+		langModule[language] ? langModule[language] :
+		langModule
+	try {
+		parser.setLanguage(lang)
+	} catch (e) {
+		console.error(e, lang)
+		throw new Error(`Could not load language ${language}`)
+	}
 	return parser
 }

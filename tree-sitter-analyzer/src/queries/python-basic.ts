@@ -2,6 +2,7 @@ import { SyntaxNode } from "tree-sitter";
 import { combinedAnalyzer, schemeQuery, StandardMetricsAnalyzers } from "./base";
 import type * as TreeSitter from "tree-sitter";
 import { nodeTypeQuery } from "../analyzer";
+import { filterLiteralMatches } from "./queryUtils";
 
 
 export const pythonAnalyzers = {
@@ -36,7 +37,6 @@ export const pythonAnalyzers = {
 	conditions: schemeQuery("conditions", `[
 		(if_statement)
 		(elif_clause)
-		(else_clause)
 		(match_statement)
 		(case_clause)
 		(conditional_expression)
@@ -155,7 +155,7 @@ export const pythonAnalyzers = {
 			(float)
 			(integer)
 			(string)
-		] @default`),
+		] @default`, filterLiteralMatches),
 	indexing:
 		schemeQuery("indexing", "(subscript) @default"),
 	slicing:

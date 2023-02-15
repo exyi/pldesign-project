@@ -2303,7 +2303,7 @@ ms@2.1.2:
   resolved "https://registry.yarnpkg.com/ms/-/ms-2.1.2.tgz#d09d1f357b443f493382a8eb3ccd183872ae6009"
   integrity sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==
 
-nan@^2.12.1, nan@^2.14.0, nan@^2.14.1, nan@^2.15.0:
+nan@^2.14.0, nan@^2.14.1, nan@^2.15.0:
   version "2.17.0"
   resolved "https://registry.yarnpkg.com/nan/-/nan-2.17.0.tgz#c0150a2368a182f033e9aa5195ec76ea41a199cb"
   integrity sha512-2ZTgtl0nJsO0KQCjEpxcIr5D+Yv90plTitZt9JBfQvVJDS5seMl3FOvsh3+9CoYWXf/1l5OaZzzF6nDm4cagaQ==
@@ -2960,19 +2960,19 @@ to-regex-range@^5.0.1:
   dependencies:
     is-number "^7.0.0"
 
+tree-sitter-c-sharp@^0.20.0:
+  version "0.20.0"
+  resolved "https://registry.yarnpkg.com/tree-sitter-c-sharp/-/tree-sitter-c-sharp-0.20.0.tgz#9615110b6ced219159f26d19c8f1cfb85b06bc18"
+  integrity sha512-HOR6fQtghA7hp/LC6fQzzCyRv8TINh/hqYUULYHOYmwsCV73j4PHLYg1536qv/vff1KaRd7Qx3Fs3VLzx1/WIQ==
+  dependencies:
+    nan "^2.14.0"
+
 tree-sitter-java@^0.19.1:
   version "0.19.1"
   resolved "https://registry.yarnpkg.com/tree-sitter-java/-/tree-sitter-java-0.19.1.tgz#c1bf59caaa81bf8a4a6dda99e7c97e51b3bd26d4"
   integrity sha512-yVm+4q1D4niaHcEf2iqhOcIaiSp3wxHjeC4eoLAqSQNVxSrhThmT1FEfM4yDgHV4XaxH+62xpKHCwYG9NzRt6Q==
   dependencies:
     nan "^2.14.1"
-
-tree-sitter-javascript@^0.19.0:
-  version "0.19.0"
-  resolved "https://registry.yarnpkg.com/tree-sitter-javascript/-/tree-sitter-javascript-0.19.0.tgz#20fc0da277502dac2bb3bf9ff75372268e761558"
-  integrity sha512-SNykDdNgmlJZhX02ZIu0TQF9P7t847jV7769SxA9XrZ2QXjofQsVTMEi9+LpXZKsI0UoFYI25FnZm3fFm0z2yw==
-  dependencies:
-    nan "^2.12.1"
 
 tree-sitter-julia@^0.19.0:
   version "0.19.0"
@@ -2987,6 +2987,13 @@ tree-sitter-python@^0.20.1:
   integrity sha512-fyoWFw/C3pZG9AdYElUQlFLPQFxeUQZe0nDGv/ksESvedoPw9JBpPga2l9PNBX/QKMpTmVRB0lM2/l0LVMnFbg==
   dependencies:
     nan "^2.15.0"
+
+tree-sitter-typescript@^0.20.1:
+  version "0.20.1"
+  resolved "https://registry.yarnpkg.com/tree-sitter-typescript/-/tree-sitter-typescript-0.20.1.tgz#6b338a1414f5ed13cc39e60275ddeaa0f25870a9"
+  integrity sha512-wqpnhdVYX26ATNXeZtprib4+mF2GlYQB1cjRPibYGxDRiugx5OfjWwLE4qPPxEGdp2ZLSmZVesGUjLWzfKo6rA==
+  dependencies:
+    nan "^2.14.0"
 
 tree-sitter@^0.20.1:
   version "0.20.1"

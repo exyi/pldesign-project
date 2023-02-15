@@ -4,24 +4,26 @@ import { Analyzer } from "../analyzer";
 import { createParser } from "../parserFactory";
 import { AnalyzerQuery, Metrics } from "../queries/base";
 
-import { pythonAnalyzers } from "../queries/python-basic";
+import { typescriptAnalyzers } from "../queries/typescript-basic";
 
-const parser = createParser("python");
+const parser = createParser("typescript");
 
 
 async function analyze(source: string, queries: AnalyzerQuery | AnalyzerQuery[]): Promise<Metrics> {
 	const analyzer = new Analyzer(await parser, Array.isArray(queries) ? queries : [ queries ])
-	analyzer.analyzeFile("test", "test.py", source)
+	analyzer.analyzeFile("test", "test.ts", source)
 	return analyzer.results[0].metrics
 }
 
 
 test("class definition", async () => {
 	const m = await analyze(`
-class Foo:
-	a: int
-	def a(abc = 12):
-		return lambda x: abc`, Object.values(pythonAnalyzers))
+class Foo {
+	public a: number
+	a(abc = 12) {
+		return x => abc
+	}
+}`, Object.values(typescriptAnalyzers))
 
 	expect(m).toEqual({
 		statements: 1,
@@ -36,10 +38,12 @@ class Foo:
 
 test("function definition", async () => {
 	const m = await analyze(`
-def a(input: int) -> int:
-	def b(x):
+const a = (input: number): number => {
+	function b(x) {
 		return x + 1
-	return map(b, input)`, Object.values(pythonAnalyzers))
+	}
+	return input.map(b)
+}`, Object.values(typescriptAnalyzers))
 
 	expect(m).toEqual({
 		statements: 2,
@@ -54,7 +58,7 @@ def a(input: int) -> int:
 
 test("chained calls", async () => {
 	const m = await analyze(`
-a().b.c().d(f("", "", ""), g(), h(i(j(a.b))))`, Object.values(pythonAnalyzers))
+a().b.c().d(f(), g(), h(i(j(a.b))))`, Object.values(typescriptAnalyzers))
 
 	expect(m).toEqual({
 		statements: 1,
@@ -63,4 +67,28 @@ a().b.c().d(f("", "", ""), g(), h(i(j(a.b))))`, Object.values(pythonAnalyzers))
 		field_accesses: 2,
 		invocations: 8,
 	})
+})
+
+test("nested function", async () => {
+	const m = await analyze(`
+function a() {
+	function b() { // counts
+	}
+}
+[].map(a => {
+	function* b() { } // counts
+	return b
+})
+function c() {
+	return () => 1 // doesn't count
+}
+function d() {
+	const a = () => 100011010 // counts
+	return a
+}
+	
+`, Object.values(typescriptAnalyzers))
+
+	expect(m.nested_functions).toEqual(3)
+	expect(m.literals).toEqual(1)
 })
