@@ -5,8 +5,8 @@ import { AnalyzerQuery, copyMetrics, initializeAnalyzerQuery, InitializedAnalyze
 export function nodeTypeQuery(metricName: string, nodeType: string|string[]): AnalyzerQuery {
 	return {
 		metrics: [ metricName ],
-		matches: (tree: TreeSitter.Tree) => {
-			const result = tree.rootNode.descendantsOfType(nodeType)
+		matches: (rootNode: TreeSitter.SyntaxNode) => {
+			const result = rootNode.descendantsOfType(nodeType)
 			return {
 				[metricName]: result.length
 			}
@@ -16,7 +16,7 @@ export function nodeTypeQuery(metricName: string, nodeType: string|string[]): An
 
 export const eachNodeTypeQuery: AnalyzerQuery = {
 	metrics: [ ],
-	matches: (tree: TreeSitter.Tree) => {
+	matches: (rootNode: TreeSitter.SyntaxNode) => {
 		const result: { [k: string]: number } = { }
 
 		function matches(node: TreeSitter.SyntaxNode) {
@@ -26,7 +26,7 @@ export const eachNodeTypeQuery: AnalyzerQuery = {
 				matches(child)
 			}
 		}
-		matches(tree.rootNode)
+		matches(rootNode)
 
 		return result
 	}
@@ -36,6 +36,7 @@ export type FileResults = {
 	dir: string
 	language: string
 	file: string
+	fileGroup?: string
 	metrics: Metrics
 }
 
@@ -43,7 +44,6 @@ export class Analyzer {
 	results: FileResults[] = []
 	private _queries: InitializedAnalyzerQuery[]
 	constructor(private _parser: TreeSitter, queries: AnalyzerQuery[]) {
-
 		this._queries = queries.map(query =>
 			initializeAnalyzerQuery(query, _parser.getLanguage()))
 	}
@@ -60,21 +60,23 @@ export class Analyzer {
 		this.analyzeTree(tree, buffer.toString(), dir, file)
 	}
 
-
 	private analyzeTree(tree: TreeSitter.Tree, source: string, dir: string, file: string) {
-		const matches: Metrics = {}
+		const metrics: Metrics = {}
 		for (const query of this._queries) {
-			const result = query.matches(tree, source)
+			const result = query.matches(tree.rootNode, source)
 			for (const [key, value] of Object.entries(result)) {
 				if (value) {
-					if (matches[key] != null) {
+					if (metrics[key] != null) {
 						console.warn(`Duplicate key ${key} in query ${query}`)
 					}
-					matches[key] = value
+					metrics[key] = value
 				}
 			}
 		}
-		this.results.push({ file, dir, metrics: matches, language: this._parser.getLanguage().name })
+		if (typeof metrics.ERROR == "number" && metrics.ERROR > source.split('\n').length) {
+			console.warn(`Suspiciously high number of errors in ${file} (${metrics.ERROR} errors per ${source.split('\n').length} lines)`)
+		}
+		this.results.push({ file, dir, metrics: metrics, language: this._parser.getLanguage().name })
 	}
 
 	get totalResults() {

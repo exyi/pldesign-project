@@ -1,6 +1,6 @@
 import _ from "lodash"
 import { FileResults } from "./analyzer"
-import { copyMetrics, Histogram, Messages, Metrics } from "./queries/base"
+import { copyMetrics, Histogram, Label, Messages, Metrics } from "./queries/base"
 import * as csv from "@fast-csv/format"
 import fs from "fs"
 import fsp from "fs/promises"
@@ -18,7 +18,7 @@ export type ExportOptions = {
 	includeEmptyMetrics?: boolean
 }
 
-type MetricType = "total" | "histogram-avg" | "histogram-data" | "message-list" | { percentile: number }
+type MetricType = "total" | "histogram-avg" | "histogram-data" | "message-list" | "label" | { percentile: number }
 type MetricsList = [string, { type: MetricType, source: string }][]
 
 function getAllMetrics(files: FileResults[], options: ExportOptions = {}): MetricsList {
@@ -50,6 +50,8 @@ function getAllMetrics(files: FileResults[], options: ExportOptions = {}): Metri
 				if (options.messagesData) {
 					add(metric + "_messages", "message-list", metric)
 				}
+			} else if (val instanceof Label) {
+				add(metric, "label", metric)
 			}
 		}
 	}
@@ -86,6 +88,8 @@ function getMetricsObject(metrics: MetricsList, file: Metrics, options: ExportOp
 			value = file[d.source]
 		} else if (d.type == "message-list") {
 			value = (file[d.source] as Messages).messages
+		} else if (d.type == "label") {
+			value = (file[d.source] as Label).text
 		} else if ("percentile" in d.type) {
 			value = (file[d.source] as Histogram).percentile(d.type.percentile)
 		}
@@ -134,6 +138,7 @@ function getResultData(data: FileResults[], options: ExportOptions = {}) {
 		const f = _.sortBy(files, 'file').map(file => {
 			return {
 				file: file.file,
+				fileGroup: file.fileGroup,
 				language: file.language,
 				metrics: getMetricsObject(allMetrics, file.metrics, options),
 			}
@@ -177,25 +182,27 @@ export function saveOutputCsv(file: string, data: FileResults[], options: Export
 	})
 
 	csvStream.write([
-		"type", "dir", "file", "lang", ...d.allMetrics.map(([name, _]) => name)
+		"type", "dir", "file", "lang", "group", ...d.allMetrics.map(([name, _]) => name)
 	])
 
 	for (const dir of d.dirResults) {
 		for (const file of dir.files) {
 			csvStream.write([
-				"file", dir.dir, file.file, file.language, ...d.allMetrics.map(([n, _]) => file.metrics[n])
+				"file", dir.dir, file.file, file.language, file.fileGroup ?? "", ...d.allMetrics.map(([n, _]) => file.metrics[n])
 			])
 		}
 		for (const [lang, metrics] of Object.entries(dir.dirTotal)) {
+			const groups = _.uniq(dir.files.filter(f => f.language == lang).map(f => f.fileGroup))
+			const group = groups.length == 1 ? groups[0] : groups.length > 1 ? "?" : ""
 			csvStream.write([
-				"dir-total", dir.dir, "//total", lang, ...d.allMetrics.map(([n, _]) => metrics[n])
+				"dir-total", dir.dir, "//total", lang, group, ...d.allMetrics.map(([n, _]) => metrics[n])
 			])
 		}
 	}
 
 	for (const [lang, metrics] of Object.entries(d.totalResults)) {
 		csvStream.write([
-			"total", "//total", "//total", lang, ...d.allMetrics.map(([n, _]) => metrics[n])
+			"total", "//total", "//total", lang, "", ...d.allMetrics.map(([n, _]) => metrics[n])
 		])
 	}
 

@@ -2,57 +2,26 @@ import { SyntaxNode } from "tree-sitter";
 import { combinedAnalyzer, schemeQuery, StandardMetricsAnalyzers } from "./base";
 import type * as TreeSitter from "tree-sitter";
 import { nodeTypeQuery } from "../analyzer";
-import { filterLiteralMatches } from "./queryUtils";
+import { filterLiteralMatches, subexprCountQuery, textLengthQuery } from "./queryUtils";
 
 const functionExpressions = [ "anonymous_method_expression", "lambda_expression" ]
 function mkQuery(types: string[]) {
 	return "[" + types.map(t => "(" + t + ")").join(" ") + "]"
 }
 
-export const csharpAnalyzers = {
-	ERROR: nodeTypeQuery("ERROR", "ERROR"),
-	statements:
-		schemeQuery("statements", `[
-			; imports not included on purpose
-			(expression_statement)
-			(if_statement)
-			(switch_statement)
-			(while_statement)
-			(do_statement)
-			(for_statement)
-			(for_each_statement)
-			(yield_statement)
-			(try_statement)
-			(using_statement)
-			(lock_statement)
-			(fixed_statement)
-			(break_statement)
-			(continue_statement)
-			(goto_statement)
-			(return_statement)
-			(throw_statement)
-			(local_declaration_statement)
-			; class and function definitions not included on purpose
-		] @default`, (match) => {
-			const node = match.captures[0].node
-			return true
-		}),
-	conditions: schemeQuery("conditions", `
-		[ (if_statement)
-			(conditional_expression)
-			(switch_section (case_switch_label))
-			(switch_expression_arm)
-			(catch_filter_clause)
-		] @default
-	`),
-	loops: schemeQuery("loops", `[
-		(while_statement)
-		(do_statement)
-		(for_statement)
-		(for_each_statement)
-	] @default`),
-	expressions: combinedAnalyzer(
-		schemeQuery("expressions", `[
+const function_defs_query = `
+			(local_function_statement) @default
+			(constructor_declaration) @default
+			(method_declaration) @default
+			(operator_declaration) @default
+			(conversion_operator_declaration) @default
+			(destructor_declaration) @default
+			(accessor_declaration body: (_) @default)
+			(property_declaration value: (arrow_expression_clause)) @default
+			(indexer_declaration value: (arrow_expression_clause)) @default
+		`;
+const expressions = combinedAnalyzer(
+	schemeQuery("expressions", `[
 				(binary_expression)
 				(prefix_unary_expression)
 				(postfix_unary_expression)
@@ -103,14 +72,57 @@ export const csharpAnalyzers = {
 				(interpolation)
 			] @default
 			`, (match) => {
+		const node = match.captures[0].node;
+		// don't count a.m() as 2 expressions
+		if (["member_access_expression", "conditional_access_expression"].includes(node.type) && node.parent?.type == "invocation_expression" && node == (node.parent as any).functionNode) {
+			return false;
+		}
+		return true;
+	})
+);
+export const csharpAnalyzers = {
+	ERROR: nodeTypeQuery("ERROR", "ERROR"),
+	statements:
+		schemeQuery("statements", `[
+			; imports not included on purpose
+			(expression_statement)
+			(if_statement)
+			(switch_statement)
+			(while_statement)
+			(do_statement)
+			(for_statement)
+			(for_each_statement)
+			(yield_statement)
+			(try_statement)
+			(using_statement)
+			(lock_statement)
+			(fixed_statement)
+			(break_statement)
+			(continue_statement)
+			(goto_statement)
+			(return_statement)
+			(throw_statement)
+			(local_declaration_statement)
+			; class and function definitions not included on purpose
+		] @default`, (match) => {
 			const node = match.captures[0].node
-			// don't count a.m() as 2 expressions
-			if (["member_access_expression", "conditional_access_expression"].includes(node.type) && node.parent?.type == "invocation_expression" && node == (node.parent as any).functionNode) {
-				return false
-			}
 			return true
 		}),
-	),
+	conditions: schemeQuery("conditions", `
+		[ (if_statement)
+			(conditional_expression)
+			(switch_section (case_switch_label))
+			(switch_expression_arm)
+			(catch_filter_clause)
+		] @default
+	`),
+	loops: schemeQuery("loops", `[
+		(while_statement)
+		(do_statement)
+		(for_statement)
+		(for_each_statement)
+	] @default`),
+	expressions,
 	binary_operators:
 		schemeQuery("binary_operators", "(binary_expression) @default"),
 	invocations:
@@ -158,17 +170,7 @@ export const csharpAnalyzers = {
 	class_defs:
 		schemeQuery("class_defs", "[(class_declaration) (record_declaration) (struct_declaration) (record_struct_declaration)] @default"),
 	function_defs:
-		schemeQuery("function_defs", `
-			(local_function_statement) @default
-			(constructor_declaration) @default
-			(method_declaration) @default
-			(operator_declaration) @default
-			(conversion_operator_declaration) @default
-			(destructor_declaration) @default
-			(accessor_declaration body: (_) @default)
-			(property_declaration value: (arrow_expression_clause)) @default
-			(indexer_declaration value: (arrow_expression_clause)) @default
-		`),
+		schemeQuery("function_defs", function_defs_query),
 	lambda_functions:
 		schemeQuery("lambda_functions", `${mkQuery(functionExpressions)} @default`, (match) => {
 			const node = match.captures[0].node;
@@ -215,4 +217,6 @@ export const csharpAnalyzers = {
 			const node = match.captures[0].node
 			return node.parent?.type != "implicit_type"
 		}),
+	identifier_len: textLengthQuery("identifier_len", "(identifier) @default"),
+	function_size: subexprCountQuery("function_size", function_defs_query, expressions)
 }

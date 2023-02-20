@@ -15,6 +15,9 @@ async function analyze(source: string, queries: AnalyzerQuery | AnalyzerQuery[])
 	return analyzer.results[0].metrics
 }
 
+function onlyNumbers(m: Metrics) {
+	return Object.fromEntries(Object.entries(m).filter(([ k, v ]) => typeof v == "number"))
+}
 
 test("class definition", async () => {
 	const m = await analyze(`
@@ -25,7 +28,7 @@ class Foo {
 	}
 }`, Object.values(csharpAnalyzers))
 
-	expect(m).toEqual({
+	expect(onlyNumbers(m)).toEqual({
 		statements: 1,
 		expressions: 1,
 		class_defs: 1,
@@ -45,7 +48,7 @@ IEnumerable<int> A(IEnumerable<int> input) {
 	return input.Select(b);
 }`, Object.values(csharpAnalyzers))
 
-	expect(m).toEqual({
+	expect(onlyNumbers(m)).toEqual({
 		statements: 2,
 		expressions: 2,
 		function_defs: 2,
@@ -60,7 +63,7 @@ test("chained calls", async () => {
 	const m = await analyze(`
 a().b.c().d(f(), g(), h(i(j(a.b))));`, Object.values(csharpAnalyzers))
 
-	expect(m).toEqual({
+	expect(onlyNumbers(m)).toEqual({
 		statements: 1,
 		expressions: 10,
 		chained_calls: 2,

@@ -98,14 +98,14 @@ export function unwrapJupyter(file: File | undefined): File | undefined {
 	}
 }
 
-export function listFiles<T>(file: string, filter: RegExp, map: (f: File) => T | undefined): Promise<T[]> {
+export function listFiles<T>(file: string, filter: { include: RegExp, exclude?: RegExp }, map: (f: File) => T | undefined): Promise<T[]> {
 	const tar = tarStream.extract({
 	})
 
 	const result: T[] = []
 
 	tar.on('entry', async (header, stream: NodeJS.ReadableStream, next) => {
-		if (header.type === 'file' && filter.test(header.name)) {
+		if (header.type === 'file' && filter.include.test("/" + header.name) && (!filter.exclude || !filter.exclude.test("/" + header.name))) {
 			streamToString(stream).then(content => {
 				const x = map({
 					name: header.name,

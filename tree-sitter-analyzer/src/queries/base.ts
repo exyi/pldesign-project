@@ -8,8 +8,17 @@ export class Histogram {
 			counts = new Array(buckets.length)
 			counts.fill(0)
 		}
+		if (counts.includes(null!))
+			throw new Error("counts must not contain null")
+		if (buckets.includes(null!))
+			throw new Error("buckets must not contain null")
 		if (buckets.length != counts.length) {
 			throw new Error("buckets and counts must be the same length")
+		}
+		for (let i = 1; i < buckets.length; i++) {
+			if (buckets[i] < buckets[i - 1]) {
+				throw new Error("buckets must be sorted and unique")
+			}
 		}
 		this.counts = counts
 	}
@@ -17,7 +26,7 @@ export class Histogram {
 	public mutAdd(number: number, one: number = 1, fill = true): void {
 		if (this.buckets.length == 0 || number > this.buckets[this.buckets.length - 1]) {
 			if (fill) {
-				for (let i = this.buckets[this.buckets.length] ?? 0; i <= number; i++) {
+				for (let i = this.buckets.length ? 1+this.buckets[this.buckets.length-1] : 0; i <= number; i++) {
 					this.buckets.push(i)
 					this.counts.push(0)
 				}
@@ -72,18 +81,20 @@ export class Histogram {
 		const buckets = []
 		const counts = []
 
-		while (bucketA < a.buckets.length || bucketB < a.buckets.length) {
-			if (a.buckets[bucketA] == b.buckets[bucketB]) {
+		while (bucketA < a.buckets.length || bucketB < b.buckets.length) {
+			if (bucketA < a.buckets.length && bucketB < b.buckets.length && a.buckets[bucketA] == b.buckets[bucketB]) {
 				const count = (a.counts[bucketA] ?? 0) + (b.counts[bucketB] ?? 0)
 				counts.push(count)
 				buckets.push(a.buckets[bucketA])
 				bucketA++
 				bucketB++
-			} else if (bucketA < a.buckets.length && a.buckets[bucketA] < b.buckets[bucketB]) {
+			} else if (bucketB >= b.buckets.length || bucketA < a.buckets.length && a.buckets[bucketA] < b.buckets[bucketB]) {
+				console.assert(a.counts[bucketA] != null)
 				counts.push(a.counts[bucketA])
 				buckets.push(a.buckets[bucketA])
 				bucketA++
 			} else {
+				console.assert(b.counts[bucketB] != null)
 				counts.push(b.counts[bucketB])
 				buckets.push(b.buckets[bucketB])
 				bucketB++
@@ -121,13 +132,27 @@ export class Messages {
 		if (b.messages.length == 0) {
 			return a
 		}
-		return new Messages([...a.messages, ...b.messages])
+		return new Messages(_.uniq([...a.messages, ...b.messages]))
 	}
 
 	public static empty = new Messages([])
 }
 
-export type Metric = number | Histogram | Messages | undefined
+export class Label {
+	constructor(public text: string) { }
+	public toString(): string {
+		return this.text
+	}
+	static combine(a: Label, b: Label): Label {
+		if (a.text > b.text) {
+			return b
+		} else {
+			return a
+		}
+	}
+}
+
+export type Metric = number | Histogram | Messages | Label | undefined
 export type Metrics = { [k: string]: Metric }
 
 export function addMetrics(a: Metric, b: Metric): Metric {
@@ -148,6 +173,10 @@ export function addMetrics(a: Metric, b: Metric): Metric {
 
 	if (a instanceof Messages && b instanceof Messages) {
 		return Messages.add(a, b)
+	}
+
+	if (a instanceof Label && b instanceof Label) {
+		return Label.combine(a, b)
 	}
 
 	if (a instanceof Histogram && b == 1) {
@@ -178,25 +207,14 @@ export function prefixMetrics(prefix: string, metrics: Metrics): Metrics {
 
 export type InitializedAnalyzerQuery = {
 	metrics: string[]
-	matches(tree: TreeSitter.Tree, source: string): Metrics
+	matches(tree: TreeSitter.SyntaxNode, source: string): Metrics
 }
 
 export type AnalyzerQuery = ((language: any) => InitializedAnalyzerQuery) | InitializedAnalyzerQuery
 
-export const schemeQuery = (
-	name: string,
-	scm: string,
-	filters: { [k: string]: (m: TreeSitter.QueryMatch) => boolean | Metrics } | ((m: TreeSitter.QueryMatch) => boolean | Metrics) = (a) => true,
-	debug = false): AnalyzerQuery =>
-	(language: any): InitializedAnalyzerQuery => {
-
-	if (typeof filters == "function") {
-		filters = { "": filters }
-	}
-
-	let query: TreeSitter.Query
+function parseScmQuery(scm: string, language: any): TreeSitter.Query {
 	try {
-		query = new TreeSitter.Query(language, scm)
+		return new TreeSitter.Query(language, scm)
 	} catch (e: any) {
 		const position = e.message?.match(/at position (\d+)/)?.[1]
 		if (position) {
@@ -214,12 +232,26 @@ export const schemeQuery = (
 		}
 		throw e
 	}
+}
+
+export const schemeQuery = (
+	name: string,
+	scm: string,
+	filters: { [k: string]: (m: TreeSitter.QueryMatch) => boolean | Metrics } | ((m: TreeSitter.QueryMatch) => boolean | Metrics) = (a) => true,
+	debug = false): AnalyzerQuery =>
+	(language: any): InitializedAnalyzerQuery => {
+
+	if (typeof filters == "function") {
+		filters = { "": filters }
+	}
+
+	const query = parseScmQuery(scm, language)
 	
 	return {
 		metrics: [ name ],
-		matches: (tree: TreeSitter.Tree, source: string) => {
+		matches: (rootNode: TreeSitter.SyntaxNode, source: string) => {
 			const metrics: Metrics = {}
-			const matches = query.matches(tree.rootNode)
+			const matches = query.matches(rootNode)
 			for (const m of matches) {
 				for (const [fname, filter] of Object.entries(filters)) {
 					const metricName = concatMetricName(name, fname)
@@ -247,6 +279,27 @@ export const schemeQuery = (
 	}
 }
 
+export const schemeQueryHistogram = (
+	name: string,
+	scm: string,
+	number: (m: TreeSitter.QueryMatch) => number | undefined): AnalyzerQuery =>
+	(language: any): InitializedAnalyzerQuery => {
+	const query = parseScmQuery(scm, language)
+	return {
+		metrics: [ name ],
+		matches: (rootNode: TreeSitter.SyntaxNode, source: string) => {
+			const histogram = new Histogram([0], [0])
+			for (const m of query.matches(rootNode)) {
+				const n = number(m)
+				if (n != null) {
+					histogram.mutAdd(n, 1, true)
+				}
+			}
+			return { [name]: histogram }
+		}
+	}
+}
+
 export function initializeAnalyzerQuery(query: AnalyzerQuery, language: any): InitializedAnalyzerQuery {
 	if (typeof query == "function") {
 		return query(language)
@@ -262,10 +315,10 @@ export function combinedAnalyzer(...queries: AnalyzerQuery[]): AnalyzerQuery {
 		const initializedQueries = queries.map(q => initializeAnalyzerQuery(q, language))
 		return {
 			metrics: _.uniq(_.flatMap(initializedQueries, q => q.metrics)),
-			matches: (tree: TreeSitter.Tree, source: string) => {
+			matches: (rootNode: TreeSitter.SyntaxNode, source: string) => {
 				const metrics: Metrics = {}
 				for (const q of initializedQueries) {
-					copyMetrics(metrics, q.matches(tree, source))
+					copyMetrics(metrics, q.matches(rootNode, source))
 				}
 				return metrics
 			}

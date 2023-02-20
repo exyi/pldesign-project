@@ -2,49 +2,96 @@ import { SyntaxNode } from "tree-sitter";
 import { combinedAnalyzer, schemeQuery, StandardMetricsAnalyzers } from "./base";
 import type * as TreeSitter from "tree-sitter";
 import { nodeTypeQuery } from "../analyzer";
-import { filterLiteralMatches } from "./queryUtils";
+import { filterLiteralMatches, subexprCountQuery, textLengthQuery } from "./queryUtils";
 
-const functionExpressions = ["function", "arrow_function", "generator_function" ]
-const functionDefs = ["function_declaration", "generator_function_declaration", "method_definition" ]
-function mkQuery(types: string[]) {
+const functionExpressions = Object.freeze(["function", "arrow_function", "generator_function" ])
+const functionDefs = Object.freeze(["function_declaration", "generator_function_declaration", "method_definition" ])
+function mkQuery(types: readonly string[]) {
 	return "[" + types.map(t => "(" + t + ")").join(" ") + "]"
 }
 
+const statements = schemeQuery("statements", `[
+	; imports not included on purpose
+	(export_statement)
+	(expression_statement)
+	(if_statement)
+	(switch_statement)
+	(for_statement)
+	(for_in_statement)
+	(while_statement)
+	(do_statement)
+	(try_statement)
+	(break_statement)
+	(continue_statement)
+	(return_statement)
+	(throw_statement)
+	(lexical_declaration (variable_declarator value: (_ !body)))
+	(variable_declaration (variable_declarator value: (_ !body)))
+	; class and function definitions not included on purpose
+] @default`, (match) => {
+	const node = match.captures[0].node
+	// don't count fields as statements
+	if (node.parent?.type == "block" && node.parent?.parent?.type == "class_definition") {
+		return false
+	}
+	if (["variable_declaration", "lexical_declaration"].includes(node.type)) {
+		const variables = node.children.filter(c => c.type == "variable_declarator")
+		if (variables.every((v: any) => v.valueNode && functionExpressions.includes(v.valueNode.type))) {
+			return false
+		}
+	}
+	return true
+})
+
+const expressions = combinedAnalyzer(
+	schemeQuery("expressions", `[
+			(binary_expression)
+			(unary_expression)
+			(ternary_expression)
+			(assignment_expression)
+			(augmented_assignment_expression) ; i += 1
+			(update_expression) ; i++
+			(call_expression)
+			(new_expression)
+			(member_expression)
+			(await_expression)
+			(function)
+			(arrow_function)
+			(subscript_expression)
+			(array)
+			(array_pattern)
+			(object)
+			(object_pattern)
+			(spread_element)
+			(rest_pattern)
+			(yield_expression)
+			; actually, let's count it as statement (sequence_expression)
+		] @default
+		
+		(template_string (template_substitution) @default)
+		`, (match) => {
+		const node = match.captures[0].node
+		// don't count a.m() as 2 expressions
+		if (node.type == "member_expression" && node.parent?.type == "call_expression" && node == (node.parent as any).functionNode) {
+			return false
+		}
+		// don't count const a = function() { }, it's function definition
+		if (functionExpressions.includes(node.type) && ["variable_declarator"].includes(node.parent?.type!)) {
+			return false
+		}
+		return true
+	}),
+);
+
+const function_defs_query = `
+			(method_definition) @default
+			(function_declaration) @default
+			(generator_function_declaration) @default
+			(variable_declarator value: ${mkQuery(functionExpressions)} @default)
+		`;
 export const typescriptAnalyzers = {
 	ERROR: nodeTypeQuery("ERROR", "ERROR"),
-	statements:
-		schemeQuery("statements", `[
-			; imports not included on purpose
-			(export_statement)
-			(expression_statement)
-			(if_statement)
-			(switch_statement)
-			(for_statement)
-			(for_in_statement)
-			(while_statement)
-			(do_statement)
-			(try_statement)
-			(break_statement)
-			(continue_statement)
-			(return_statement)
-			(throw_statement)
-			(lexical_declaration (variable_declarator value: (_ !body)))
-			(variable_declaration (variable_declarator value: (_ !body)))
-			; class and function definitions not included on purpose
-		] @default`, (match) => {
-			const node = match.captures[0].node
-			// don't count fields as statements
-			if (node.parent?.type == "block" && node.parent?.parent?.type == "class_definition") {
-				return false
-			}
-			if (["variable_declaration", "lexical_declaration"].includes(node.type)) {
-				const variables = node.children.filter(c => c.type == "variable_declarator")
-				if (variables.every((v: any) => v.valueNode && functionExpressions.includes(v.valueNode.type))) {
-					return false
-				}
-			}
-			return true
-		}),
+	statements,
 	conditions: schemeQuery("conditions", `
 		[ (if_statement) (ternary_expression) (switch_case) ] @default
 		(subscript_expression object: (array (_) @default))
@@ -56,45 +103,7 @@ export const typescriptAnalyzers = {
 		(for_statement)
 		(for_in_statement)
 	] @default`),
-	expressions: combinedAnalyzer(
-		schemeQuery("expressions", `[
-				(binary_expression)
-				(unary_expression)
-				(ternary_expression)
-				(assignment_expression)
-				(augmented_assignment_expression) ; i += 1
-				(update_expression) ; i++
-				(call_expression)
-				(new_expression)
-				(member_expression)
-				(await_expression)
-				(function)
-				(arrow_function)
-				(subscript_expression)
-				(array)
-				(array_pattern)
-				(object)
-				(object_pattern)
-				(spread_element)
-				(rest_pattern)
-				(yield_expression)
-				; actually, let's count it as statement (sequence_expression)
-			] @default
-			
-			(template_string (template_substitution) @default)
-			`, (match) => {
-			const node = match.captures[0].node
-			// don't count a.m() as 2 expressions
-			if (node.type == "member_expression" && node.parent?.type == "call_expression" && node == (node.parent as any).functionNode) {
-				return false
-			}
-			// don't count const a = function() { }, it's function definition
-			if (functionExpressions.includes(node.type) && ["variable_declarator"].includes(node.parent?.type!)) {
-				return false
-			}
-			return true
-		}),
-	),
+	expressions,
 	binary_operators:
 		schemeQuery("binary_operators", "(binary_expression) @default"),
 	invocations:
@@ -138,12 +147,7 @@ export const typescriptAnalyzers = {
 	class_defs:
 		schemeQuery("class_defs", "[(class_declaration) (class)] @default"),
 	function_defs:
-		schemeQuery("function_defs", `
-			(method_definition) @default
-			(function_declaration) @default
-			(generator_function_declaration) @default
-			(variable_declarator value: ${mkQuery(functionExpressions)} @default)
-		`),
+		schemeQuery("function_defs", function_defs_query),
 	lambda_functions:
 		schemeQuery("lambda_functions", `${mkQuery(functionExpressions)} @default`, (match) => {
 			const node = match.captures[0].node
@@ -162,7 +166,7 @@ export const typescriptAnalyzers = {
 			const node = match.captures[0].node
 			let ancestor = node.parent
 			while (ancestor) {
-				if (["function_declaration", "generator_function_declaration", "function", "generator_function", "arrow_function", "method_definition"].includes(ancestor.type)) {
+				if (functionExpressions.concat(functionDefs).includes(ancestor.type)) {
 					return true
 				}
 				ancestor = ancestor.parent
@@ -186,4 +190,6 @@ export const typescriptAnalyzers = {
 	// 	schemeQuery("slicing", "(slice) @default"),
 	type_annotations:
 		schemeQuery("type_annotations", `(type_annotation) @default`),
+	identifier_len: textLengthQuery("identifier_len", "(identifier) @default"),
+	function_size: subexprCountQuery("function_size", function_defs_query, expressions),
 }

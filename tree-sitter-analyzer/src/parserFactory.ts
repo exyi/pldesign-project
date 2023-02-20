@@ -8,6 +8,7 @@ export async function createParser(language: string): Promise<TreeSitter> {
 	const lang =
 		langModule.default && langModule.default.nodeTypeInfo ? langModule.default :
 		langModule.nodeTypeInfo ? langModule :
+		langModule.default && langModule.default[language] ? langModule.default[language] :
 		langModule[language] ? langModule[language] :
 		langModule
 	try {

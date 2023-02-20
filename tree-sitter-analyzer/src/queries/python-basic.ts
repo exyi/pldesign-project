@@ -2,9 +2,48 @@ import { SyntaxNode } from "tree-sitter";
 import { combinedAnalyzer, schemeQuery, StandardMetricsAnalyzers } from "./base";
 import type * as TreeSitter from "tree-sitter";
 import { nodeTypeQuery } from "../analyzer";
-import { filterLiteralMatches } from "./queryUtils";
+import { filterLiteralMatches, subexprCountQuery, textLengthQuery } from "./queryUtils";
 
 
+const expressions = combinedAnalyzer(
+	schemeQuery("expressions", `[(binary_operator)
+			(unary_operator)
+			(assignment)
+			(named_expression); := assignment
+			(call)
+			(attribute) ;field access
+			(boolean_operator)
+			(not_operator)
+			(comparison_operator)
+			(await)
+			(lambda)
+			(conditional_expression)
+			(subscript)
+			(slice)
+			(list)
+			(list_comprehension)
+			(dictionary)
+			(dictionary_comprehension)
+			(set)
+			(set_comprehension)
+			(generator_expression)
+			(tuple)
+			] @default
+			
+			(string (interpolation) @default)
+			`, (match) => {
+		const node = match.captures[0].node;
+		// don't count fields as expressions
+		if (node.parent?.type == "expression_statement" && node.parent?.parent?.type == "block" && node.parent?.parent?.parent?.type == "class_definition") {
+			return false;
+		}
+		// don't count a.m() as 2 expressions
+		if (node.type == "attribute" && node.parent?.type == "call" && node == (node.parent as any).functionNode) {
+			return false;
+		}
+		return true;
+	})
+);
 export const pythonAnalyzers = {
 	ERROR: nodeTypeQuery("ERROR", "ERROR"),
 	statements:
@@ -48,45 +87,7 @@ export const pythonAnalyzers = {
 		(generator_expression)
 		(list_comprehension)
 	] @default`),
-	expressions: combinedAnalyzer(
-		schemeQuery("expressions", `[(binary_operator)
-			(unary_operator)
-			(assignment)
-			(named_expression); := assignment
-			(call)
-			(attribute) ;field access
-			(boolean_operator)
-			(not_operator)
-			(comparison_operator)
-			(await)
-			(lambda)
-			(conditional_expression)
-			(subscript)
-			(slice)
-			(list)
-			(list_comprehension)
-			(dictionary)
-			(dictionary_comprehension)
-			(set)
-			(set_comprehension)
-			(generator_expression)
-			(tuple)
-			] @default
-			
-			(string (interpolation) @default)
-			`, (match) => {
-			const node = match.captures[0].node
-			// don't count fields as expressions
-			if (node.parent?.type == "expression_statement" && node.parent?.parent?.type == "block" && node.parent?.parent?.parent?.type == "class_definition") {
-				return false
-			}
-			// don't count a.m() as 2 expressions
-			if (node.type == "attribute" && node.parent?.type == "call" && node == (node.parent as any).functionNode) {
-				return false
-			}
-			return true
-		}),
-	),
+	expressions,
 	binary_operators:
 		schemeQuery("binary_operators", "(binary_operator) @default"),
 	invocations:
@@ -166,4 +167,6 @@ export const pythonAnalyzers = {
 			(typed_parameter)
 			(function_definition return_type: (_))
 		] @default`),
+	identifier_len: textLengthQuery("identifier_len", "(identifier) @default"),
+	function_size: subexprCountQuery("function_size", "(function_definition) @default", expressions)
 }

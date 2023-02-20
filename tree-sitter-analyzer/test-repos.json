@@ -1,0 +1,16 @@
+{
+    "python-jupyter": [
+        { "lang": "python", "repo": "https://github.com/jakevdp/PythonDataScienceHandbook", "filter": "\\.ipynb$" },
+        { "lang": "python", "repo": "https://github.com/mayurmahurkar/Image_Preprocessing_Using_Python", "filter": "\\.ipynb$" },
+        { "lang": "python", "repo": "https://github.com/rasbt/deeplearning-models", "filter": "\\.ipynb$" },
+        { "lang": "python", "repo": "https://github.com/BiAPoL/Bio-image_Analysis_with_Python", "filter": "\\.ipynb$" },
+    ],
+    "python-web": [
+        { "lang": "python", "repo": "https://github.com/coleifer/sqlite-web" },
+        { "lang": "python", "repo": "https://github.com/CTFd/CTFd" },
+    ],
+    "python-lib": [
+        { "lang": "python", "repo": "https://github.com/django/django.git", "filter": "/django/.*\\.py$" },
+        { "lang": "python", "repo": "https://github.com/python/mypy", "filter": "/mypy/.*\\.py$" }
+    ]
+}

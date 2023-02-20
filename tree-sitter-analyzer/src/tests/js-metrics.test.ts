@@ -2,7 +2,7 @@ import type * as TreeSitter from "tree-sitter";
 import { Analyzer } from "../analyzer";
 
 import { createParser } from "../parserFactory";
-import { AnalyzerQuery, Metrics } from "../queries/base";
+import { AnalyzerQuery, Histogram, Metrics } from "../queries/base";
 
 import { typescriptAnalyzers } from "../queries/typescript-basic";
 
@@ -13,6 +13,9 @@ async function analyze(source: string, queries: AnalyzerQuery | AnalyzerQuery[])
 	const analyzer = new Analyzer(await parser, Array.isArray(queries) ? queries : [ queries ])
 	analyzer.analyzeFile("test", "test.ts", source)
 	return analyzer.results[0].metrics
+}
+function onlyNumbers(m: Metrics) {
+	return Object.fromEntries(Object.entries(m).filter(([ k, v ]) => typeof v == "number"))
 }
 
 
@@ -25,7 +28,7 @@ class Foo {
 	}
 }`, Object.values(typescriptAnalyzers))
 
-	expect(m).toEqual({
+	expect(onlyNumbers(m)).toEqual({
 		statements: 1,
 		expressions: 1,
 		class_defs: 1,
@@ -45,7 +48,7 @@ const a = (input: number): number => {
 	return input.map(b)
 }`, Object.values(typescriptAnalyzers))
 
-	expect(m).toEqual({
+	expect(onlyNumbers(m)).toEqual({
 		statements: 2,
 		expressions: 2,
 		function_defs: 2,
@@ -60,13 +63,19 @@ test("chained calls", async () => {
 	const m = await analyze(`
 a().b.c().d(f(), g(), h(i(j(a.b))))`, Object.values(typescriptAnalyzers))
 
-	expect(m).toEqual({
+	expect(onlyNumbers(m)).toEqual({
 		statements: 1,
 		expressions: 10,
 		chained_calls: 2,
 		field_accesses: 2,
 		invocations: 8,
 	})
+	const identifiersH = m.identifier_len  as Histogram
+	expect(identifiersH.avg()).toEqual(1)
+	expect(identifiersH.percentile(0.8)).toEqual(1)
+	expect(identifiersH.total()).toEqual(7)
+	const h2 = Histogram.add(identifiersH, identifiersH)
+	expect(h2.avg()).toEqual(1)
 })
 
 test("nested function", async () => {
